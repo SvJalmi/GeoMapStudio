@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GeoMap Studio — Goa Infrastructure Asset Management</title>
+
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/pmtiles@3.0.7/dist/pmtiles.js"></script>
+<script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+
+<!-- ============================== LOADING ============================== -->
+<div id="loadingScreen">
+  <div class="loading-mark">GeoMap Studio</div>
+  <div class="loading-sub">Loading Goa infrastructure dataset…</div>
+</div>
+
+<!-- ============================== TOP BAR ============================== -->
+<header id="topToolbar">
+  <div class="toolbar-group toolbar-brand">
+    <button id="sidebarToggleBtn" class="icon-btn" title="Toggle assets panel">☰</button>
+    <span class="brand-mark">GeoMap<span class="brand-accent">Studio</span></span>
+  </div>
+  <div class="toolbar-group toolbar-right">
+    <button id="view3DBtn" class="btn btn-ghost" title="Switch between 2D and 3D perspective">3D View</button>
+    <button id="addAssetBtn" class="btn btn-primary" title="Add a new asset">+ New Asset</button>
+  </div>
+</header>
+
+<div id="toolsPopover" class="tools-popover">
+  <div class="tools-popover-section">
+    <div class="tools-popover-label">Measure</div>
+    <div class="tools-popover-row">
+      <button id="measureDistanceBtn" class="tool-btn" title="Measure distance"><span class="ti">⟷</span>Distance</button>
+      <button id="measureAreaBtn" class="tool-btn" title="Measure area"><span class="ti">⛶</span>Area</button>
+      <button id="measureClearBtn" class="icon-btn" title="Clear measurement">✕</button>
+    </div>
+  </div>
+  <div class="tools-popover-section">
+    <div class="tools-popover-label">Geofencing</div>
+    <div class="tools-popover-row">
+      <button id="geofenceDrawBtn" class="tool-btn" title="Draw a geofence zone"><span class="ti">⬡</span>Draw zone</button>
+      <button id="geofenceClearBtn" class="icon-btn" title="Clear geofences">✕</button>
+    </div>
+  </div>
+  <div class="tools-popover-section">
+    <div class="tools-popover-label">Route planning</div>
+    <label class="popover-field-label">Start point <span class="dim">(click map)</span></label>
+    <input id="routeStartInput" class="popover-input mono" readonly placeholder="Click map to set start" />
+    <label class="popover-field-label">End point <span class="dim">(click map)</span></label>
+    <input id="routeEndInput" class="popover-input mono" readonly placeholder="Click map to set end" />
+    <div class="seg-group seg-group-wide">
+      <button id="routeModeDriving" class="seg-btn seg-btn-wide" title="Drive">🚗 Drive</button>
+      <button id="routeModeWalking" class="seg-btn seg-btn-wide" title="Walk">🚶 Walk</button>
+      <button id="routeModeCycling" class="seg-btn seg-btn-wide" title="Cycle">🚴 Cycle</button>
+    </div>
+    <div class="tools-popover-row">
+      <button id="routeStartBtn" class="tool-btn" title="Plan a route"><span class="ti">◆</span>Plan route</button>
+      <button id="routeFinishBtn" class="tool-btn" style="display:none" title="Finish adding stops and compute the route">Finish route</button>
+      <button id="routeClearBtn" class="icon-btn" title="Clear route">✕</button>
+    </div>
+    <div class="tools-popover-row">
+      <button id="routeAnimateBtn" class="btn btn-sm popover-full-btn">▶ Animate Vehicle</button>
+    </div>
+  </div>
+  <div class="tools-popover-section">
+    <div class="tools-popover-label">Simulated tracking</div>
+    <div class="tools-popover-row">
+      <button id="trackingToggleBtn" class="tool-btn" title="Simulated real-time tracking"><span class="ti">▶</span>Start simulated tracking</button>
+    </div>
+  </div>
+  <div class="tools-popover-section">
+    <div class="tools-popover-label">Camera tour</div>
+    <label class="popover-field-label">Tour which asset type?</label>
+    <select id="tourCategorySelect" class="popover-input"></select>
+    <div class="tools-popover-row">
+      <button id="tourAssetsBtn" class="btn btn-sm popover-full-btn">▶ Tour Goa Assets</button>
+    </div>
+    <div class="tools-popover-row">
+      <button id="orbitSelectedBtn" class="btn btn-sm popover-full-btn">🔄 Orbit Selected</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================== LEFT ACTIVITY RAIL ============================== -->
+<nav id="activityRail">
+  <button id="timelineToggleBtn" class="rail-btn" title="Timeline"><span class="rail-icon">◷</span><span class="rail-label">Timeline</span></button>
+  <button id="filterToggleBtn" class="rail-btn" title="Advanced filters">
+    <span class="rail-icon">▽<span id="filterBadge" class="badge"></span></span><span class="rail-label">Filters</span>
+  </button>
+  <button id="aiToggleBtn" class="rail-btn" title="AI Insights"><span class="rail-icon">◈</span><span class="rail-label">AI</span></button>
+  <button id="analyticsToggleBtn" class="rail-btn" title="Analytics dashboard"><span class="rail-icon">▥</span><span class="rail-label">Analytics</span></button>
+  <button id="settingsToggleBtn" class="rail-btn" title="Settings"><span class="rail-icon">⚙</span><span class="rail-label">Settings</span></button>
+  <button id="notifBell" class="rail-btn" title="Notifications">
+    <span class="rail-icon">🔔<span id="notifBadge" class="badge"></span></span><span class="rail-label">Alerts</span>
+  </button>
+</nav>
+
+<div id="appBody">
+
+  <!-- ============================== LEFT SIDEBAR ============================== -->
+  <aside id="sidebar">
+    <div class="sidebar-section search-section">
+      <div class="search-row">
+        <input id="assetSearchInput" type="text" placeholder="Search assets by name, ID, owner…" autocomplete="off" />
+        <button id="searchNearMeBtn" class="icon-btn" title="Search near me">◎ Near me</button>
+      </div>
+      <div id="searchSuggestions" class="search-suggestions"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-heading">
+        <span>Asset types</span>
+        <button id="chipsClearBtn" class="link-btn">Clear</button>
+      </div>
+      <div id="categoryChips" class="chips-wrap"></div>
+    </div>
+
+    <div class="sidebar-section asset-list-section">
+      <div class="section-heading">
+        <span id="assetCountLabel">0 of 0 assets</span>
+      </div>
+      <div id="assetListBody" class="asset-list-body"></div>
+      <div id="bulkActionsBar" class="bulk-actions-bar">
+        <span id="bulkCount">0 selected</span>
+        <button id="bulkZoom" class="btn btn-sm">Zoom</button>
+        <button id="bulkExport" class="btn btn-sm">Export</button>
+        <button id="bulkDelete" class="btn btn-sm btn-danger">Delete</button>
+        <button id="bulkClear" class="btn btn-sm">Clear</button>
+      </div>
+    </div>
+
+    <details class="sidebar-section layer-manager-section">
+      <summary class="section-heading">Layer manager</summary>
+      <div class="layer-manager-actions">
+        <button id="layerShowAll" class="btn btn-sm">Show all</button>
+        <button id="layerHideAll" class="btn btn-sm">Hide all</button>
+      </div>
+      <div id="layerList" class="layer-list"></div>
+    </details>
+
+    <details class="sidebar-section io-section">
+      <summary class="section-heading">Geofences</summary>
+      <div id="geofenceList"></div>
+    </details>
+
+    <details class="sidebar-section io-section">
+      <summary class="section-heading">Import / export</summary>
+      <div class="io-actions">
+        <button id="exportGeoJSON" class="btn btn-sm">Export GeoJSON</button>
+        <button id="exportCSV" class="btn btn-sm">Export CSV</button>
+        <button id="exportKML" class="btn btn-sm">Export KML</button>
+        <button id="exportPNG" class="btn btn-sm">Export map PNG</button>
+        <button id="exportPDF" class="btn btn-sm">Print PDF report</button>
+        <label class="btn btn-sm file-btn">Import file
+          <input id="importFileInput" type="file" accept=".geojson,.json,.csv,.kml,.gpx" hidden />
+        </label>
+      </div>
+    </details>
+  </aside>
+
+  <!-- ============================== MAP ============================== -->
+  <main id="mapWrap">
+    <div id="map"></div>
+    <!-- ============================== FLOATING CANVAS TOOL DOCK ============================== -->
+    <aside id="drawDock">
+      <div class="dock-group">
+        <button class="draw-tool-btn dock-btn" data-mode="point" title="Point">●</button>
+        <button class="draw-tool-btn dock-btn" data-mode="line" title="Line">╱</button>
+        <button class="draw-tool-btn dock-btn" data-mode="polygon" title="Polygon">▱</button>
+        <button class="draw-tool-btn dock-btn" data-mode="rectangle" title="Rectangle">▭</button>
+        <button class="draw-tool-btn dock-btn" data-mode="circle" title="Circle">◯</button>
+        <button class="draw-tool-btn dock-btn" data-mode="freehand" title="Freehand">∿</button>
+      </div>
+      <div class="dock-divider"></div>
+      <div class="dock-group">
+        <button id="editVertexBtn" class="dock-btn" title="Edit vertices">✥</button>
+        <button id="duplicateBtn" class="dock-btn" title="Duplicate selected">⧉</button>
+        <button id="mergeBtn" class="dock-btn" title="Merge selected polygons">⇄</button>
+        <button class="draw-tool-btn dock-btn" data-mode="split" title="Split a selected polygon">✂</button>
+      </div>
+      <div class="dock-divider"></div>
+      <div class="dock-group">
+        <button id="globalUndoBtn" class="dock-btn" title="Undo">↶</button>
+        <button id="globalRedoBtn" class="dock-btn" title="Redo">↷</button>
+      </div>
+      <div class="dock-divider"></div>
+
+      <div class="tools-popover-wrap">
+        <button id="toolsMenuBtn" class="dock-btn dock-btn-wide" title="Measure, geofence, routing & tracking tools">⋯</button>
+      </div>
+    </aside>
+
+
+    <div id="drawHint" class="floating-hint"></div>
+    <div id="drawActionBar" class="floating-action-bar">
+      <button id="drawUndoPointBtn" class="btn btn-sm">Undo last point</button>
+      <button id="drawCancelBtn" class="btn btn-sm">Cancel</button>
+      <button id="drawFinishBtn" class="btn btn-sm btn-primary">Finish</button>
+    </div>
+
+    <div id="editPanel" class="floating-edit-panel" style="display:none">
+      <div id="editPanelLabel"></div>
+      <label class="edit-rotate-label">Rotate
+        <input id="rotateSlider" type="range" min="-180" max="180" value="0" step="1" />
+      </label>
+      <div class="edit-panel-actions">
+        <button id="editCancelBtn" class="btn btn-sm">Cancel</button>
+        <button id="editSaveBtn" class="btn btn-sm btn-primary">Save</button>
+      </div>
+    </div>
+
+    <div id="geofenceHint" class="floating-hint" style="display:none">Click to add geofence vertices. Double-click, or click the first point again, to close.</div>
+    <div id="routeHint" class="floating-hint" style="display:none"></div>
+    <div id="routeResult" class="floating-readout" style="display:none"></div>
+    <div id="measureReadout" class="floating-readout" style="display:none"></div>
+
+    <div id="mapStatusBar">
+      <span id="coordReadout">—, —</span>
+      <span id="cameraReadout">z— · p— · b—</span>
+      <span id="fpsReadout">— fps</span>
+    </div>
+
+    <div id="timelinePanel" class="bottom-flyout">
+      <div class="flyout-header">
+        <span>Timeline</span>
+        <button id="timelineCloseBtn" class="link-btn">×</button>
+      </div>
+      <div class="timeline-controls">
+        <button id="timelinePlayBtn" class="btn btn-sm">▶ Play</button>
+        <button id="timelineResetBtn" class="btn btn-sm">Reset</button>
+        <input id="timelineSlider" type="range" min="0" max="1" value="1" />
+        <span id="timelineDateLabel"></span>
+      </div>
+    </div>
+  </main>
+
+  <!-- ============================== RIGHT FLYOUTS ============================== -->
+  <div id="filterPanel" class="right-flyout">
+    <div class="flyout-header"><span>Advanced filters</span><button id="filterCloseBtn" class="link-btn">×</button></div>
+    <div class="flyout-body">
+      <div class="filter-group"><h4>Status</h4><div id="filterStatusGroup"></div></div>
+      <div class="filter-group"><h4>Priority</h4><div id="filterPriorityGroup"></div></div>
+      <div class="filter-group"><h4>Owner</h4><div id="filterOwnerGroup"></div></div>
+      <div class="filter-group"><h4>City</h4><div id="filterCityGroup"></div></div>
+      <div class="filter-group">
+        <h4>Last updated between</h4>
+        <div class="date-range-row">
+          <input id="filterDateFrom" type="date" />
+          <input id="filterDateTo" type="date" />
+        </div>
+      </div>
+      <button id="filterResetBtn" class="btn btn-sm">Reset all filters</button>
+    </div>
+  </div>
+
+  <div id="aiPanel" class="right-flyout">
+    <div class="flyout-header"><span>◈ AI Insights</span><button id="aiCloseBtn" class="link-btn">×</button></div>
+    <div class="flyout-body">
+      <div class="ai-block">
+        <div class="ai-block-header"><h4>Map summary</h4><button id="aiRefreshBtn" class="link-btn">Refresh</button></div>
+        <div id="aiSummary"></div>
+      </div>
+      <div class="ai-block">
+        <h4>Smart search</h4>
+        <div class="search-row">
+          <input id="aiSmartSearchInput" type="text" placeholder='e.g. "show all damaged pipelines"' />
+          <button id="aiSmartSearchBtn" class="btn btn-sm btn-primary">Go</button>
+        </div>
+        <div id="aiSmartSearchResult" class="ai-row-sub"></div>
+      </div>
+      <div class="ai-block">
+        <h4>Duplicate detection</h4>
+        <div id="aiDuplicates"></div>
+      </div>
+      <div class="ai-block">
+        <h4>Predictive maintenance</h4>
+        <div id="aiMaintenance"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="analyticsPanel" class="right-flyout wide">
+    <div class="flyout-header"><span>▥ Analytics dashboard</span><button id="analyticsCloseBtn" class="link-btn">×</button></div>
+    <div class="flyout-body">
+      <div class="kpi-row">
+        <div class="kpi-tile"><span id="kpiTotal">0</span><label>Total assets</label></div>
+        <div class="kpi-tile"><span id="kpiActive">0</span><label>Active</label></div>
+        <div class="kpi-tile"><span id="kpiMaintenance">0</span><label>Maintenance</label></div>
+        <div class="kpi-tile"><span id="kpiCritical">0</span><label>Critical</label></div>
+      </div>
+      <div class="chart-block"><h4>By category</h4><canvas id="categoryChart"></canvas></div>
+      <div class="chart-block"><h4>By status</h4><canvas id="statusChart"></canvas></div>
+      <div class="chart-block"><h4>Updates over time</h4><canvas id="trendChart"></canvas></div>
+      <div class="chart-block"><h4>Cumulative assets by status</h4><canvas id="areaChart"></canvas></div>
+    </div>
+  </div>
+
+  <div id="settingsPanel" class="right-flyout">
+    <div class="flyout-header"><span>⚙ Settings</span><button id="settingsCloseBtn" class="link-btn">×</button></div>
+    <div class="flyout-body">
+      <div class="settings-group">
+        <h4>Basemaps</h4>
+        <div id="basemapGallery" class="basemap-gallery"></div>
+      </div>
+
+      <div class="settings-group">
+        <h4>View mode</h4>
+        <div class="view-mode-row">
+          <button id="viewMode2D" class="view-mode-btn active" data-mode="2d">2D</button>
+          <button id="viewMode3D" class="view-mode-btn" data-mode="3d">3D</button>
+          <button id="viewModeGlobe" class="view-mode-btn" data-mode="globe">🌐 Globe</button>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <h4>Overlays</h4>
+        <label class="switch-row"><input id="toggleTerrain" type="checkbox" /> 🏔 Terrain + Hillshade</label>
+        <label class="switch-row"><input id="toggleMultidirectionalHillshade" type="checkbox" /> Multidirectional hillshade</label>
+        <label class="switch-row"><input id="toggle3DBuildings" type="checkbox" /> 🏢 3D Buildings</label>
+        <label class="switch-row"><input id="toggleClusteringSetting" type="checkbox" checked /> 🔵 Clustering</label>
+        <label class="switch-row"><input id="toggleHeatmapSetting" type="checkbox" /> 🔥 Heatmap</label>
+        <label class="switch-row"><input id="toggleClusterByCategory" type="checkbox" /> Cluster by asset type</label>
+        <label class="switch-row"><input id="togglePipelineFlowSetting" type="checkbox" /> Pipeline flow animation</label>
+        <label class="switch-row"><input id="toggleDayNight" type="checkbox" /> Day/Night mode (live solar terminator)</label>
+        <label class="switch-row"><input id="toggleTrackingSetting" type="checkbox" /> 🚓 Live Tracking</label>
+        <label class="switch-row"><input id="toggleWMS" type="checkbox" /> 🛰 WMS Layer</label>
+        <div id="wmsFields" class="wms-fields" style="display:none">
+          <input id="wmsUrlInput" class="popover-input" placeholder="WMS base URL (e.g. ISRO Bhuvan WMS endpoint)" />
+          <input id="wmsLayerInput" class="popover-input" placeholder="Layer name" />
+          <p class="settings-note">Works with any standards-compliant WMS service. Many providers (including ISRO Bhuvan) require free registration for an access key — substitute your own URL/layer here.</p>
+        </div>
+        <label class="switch-row"><input id="toggleZoneHatch" type="checkbox" /> Zone hatch pattern (fill-pattern)</label>
+        <label class="switch-row"><input id="toggleHashRouting" type="checkbox" checked /> 🔗 URL Hash Routing</label>
+      </div>
+
+      <div class="settings-group">
+        <h4>Display</h4>
+        <label class="switch-row"><input id="togglePresentationMode" type="checkbox" /> Presentation mode (disable all interaction)</label>
+      </div>
+
+      <div class="settings-group">
+        <label>Theme
+          <select id="themeSelect"><option value="dark">Dark</option><option value="light">Light</option></select>
+        </label>
+        <label>Units
+          <select id="unitsSelect"><option value="metric">Metric</option><option value="imperial">Imperial</option></select>
+        </label>
+      </div>
+      <div class="settings-group">
+        <h4>Map behavior</h4>
+        <label class="switch-row"><input id="toggleRestrictPanning" type="checkbox" /> Restrict panning to Goa</label>
+        <label class="switch-row"><input id="toggleRotationLock" type="checkbox" /> Lock rotation (north up)</label>
+        <label class="switch-row"><input id="toggleWorldCopies" type="checkbox" /> Render world copies</label>
+        <label class="switch-row"><input id="toggleCooperativeGestures" type="checkbox" /> Cooperative gestures (trackpad-friendly)</label>
+      </div>
+      <div class="settings-group">
+        <h4>Offline basemap (PMTiles)</h4>
+        <label>Load a local .pmtiles file<input id="offlinePmtilesInput" type="file" accept=".pmtiles" /></label>
+        <p class="settings-note">Works fully offline afterward. Get a free .pmtiles extract for any region at protomaps.com.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="notifPanel" class="right-flyout">
+    <div class="flyout-header"><span>🔔 Notifications</span><button id="notifClearAll" class="link-btn">Clear all</button></div>
+    <div id="notifList" class="flyout-body"></div>
+  </div>
+
+  <div id="detailDrawer" class="right-flyout detail-drawer">
+    <div class="flyout-header">
+      <span id="detailTitle"></span>
+      <div class="detail-header-actions">
+        <button id="detailEditBtn" class="link-btn">Edit</button>
+        <button id="detailDeleteBtn" class="link-btn link-danger">Delete</button>
+        <button id="detailClose" class="link-btn">×</button>
+      </div>
+    </div>
+    <div id="detailBody" class="flyout-body"></div>
+  </div>
+</div>
+
+<!-- ============================== ASSET MODAL ============================== -->
+<div id="assetModal" class="modal-overlay">
+  <form id="assetForm" class="modal-card">
+    <div class="modal-header">
+      <span id="assetModalTitle">New Asset</span>
+      <button type="button" id="assetModalClose" class="link-btn">×</button>
+    </div>
+    <div class="modal-body">
+      <label>Name<input id="assetName" type="text" required /></label>
+      <div class="form-row-2">
+        <label>Type<select id="assetType"></select></label>
+        <label>Category<select id="assetCategory"></select></label>
+      </div>
+      <div class="form-row-2">
+        <label>Owner<select id="assetOwner"></select></label>
+        <label>Status<select id="assetStatus"></select></label>
+      </div>
+      <div class="form-row-2">
+        <label>Priority<select id="assetPriority"></select></label>
+        <label>City<select id="assetCity"></select></label>
+      </div>
+      <label>GPS accuracy (m)<input id="assetGps" type="number" min="0" step="0.1" /></label>
+      <label>Description<textarea id="assetDescription" rows="3" placeholder="Optional notes or details…"></textarea></label>
+      <label>Photos (up to 4)<input id="assetImages" type="file" accept="image/*" multiple /></label>
+      <div id="assetImagesPreview" class="asset-images-preview"></div>
+      <label>Documents<input id="assetDocuments" type="file" multiple /></label>
+      <div id="assetDocumentsList" class="asset-documents-list"></div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" id="assetDeleteBtn" class="btn btn-danger">Delete</button>
+      <button type="submit" class="btn btn-primary">Save asset</button>
+    </div>
+  </form>
+</div>
+
+<div id="toastContainer"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
