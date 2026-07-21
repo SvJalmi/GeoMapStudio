@@ -1,3 +1,4 @@
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 # 🌍 GeoMapStudio
 
 An advanced Web GIS platform for infrastructure asset management built using **MapLibre GL JS**, **JavaScript**, and **GeoJSON**.
